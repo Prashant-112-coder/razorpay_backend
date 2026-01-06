@@ -31,21 +31,26 @@ app.get("/", (req, res) => {
 // ===================================
 app.post("/create-order", async (req, res) => {
   try {
+    console.log("Creating order...");
+
     const options = {
-      amount: 9900, // ₹99 in paise
+      amount: 9900,
       currency: "INR",
       receipt: "receipt_" + Date.now()
     };
 
     const order = await razorpay.orders.create(options);
+
+    console.log("Order created:", order.id);
     res.status(200).json(order);
 
   } catch (error) {
-    console.error("Create Order Error:", error);
+    console.error("Create Order Error FULL:", error);
+
     res.status(500).json({
       success: false,
       message: "Failed to create order",
-      error: error.message
+      error: error.error || error.message || error
     });
   }
 });
