@@ -8,13 +8,20 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// 🔎 DEBUG: Check if environment variables are loading
+console.log("RAZORPAY_KEY_ID:", process.env.RAZORPAY_KEY_ID);
+console.log(
+  "RAZORPAY_KEY_SECRET:",
+  process.env.RAZORPAY_KEY_SECRET ? "Loaded" : "Missing"
+);
+
 // ✅ Razorpay instance using ENV variables
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
-// 🟢 Health check route (optional)
+// 🟢 Health check
 app.get("/", (req, res) => {
   res.send("Razorpay Backend is Running");
 });
@@ -50,7 +57,6 @@ app.post("/verify-payment", (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    // 🔍 Validate input
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({
         success: false,
@@ -58,7 +64,6 @@ app.post("/verify-payment", (req, res) => {
       });
     }
 
-    // 🔐 Create signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
     const expectedSignature = crypto
@@ -66,7 +71,6 @@ app.post("/verify-payment", (req, res) => {
       .update(body)
       .digest("hex");
 
-    // ✅ Compare signatures
     if (expectedSignature === razorpay_signature) {
       return res.status(200).json({
         success: true,
