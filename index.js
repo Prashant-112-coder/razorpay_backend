@@ -51,11 +51,7 @@ app.post("/verify-payment", (req, res) => {
       res.status(400).json({ success: false, message: "Signature mismatch" });
     }
   } catch (error) {
-    console.error("Verification Error:", error);
-    res.status(500).json({ success: false, error: "Server verification failed" });
+    console.error("Verification error:", error);
+    res.status(500).json({ success: false, error: "Server error" });
   }
-});
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
 });
