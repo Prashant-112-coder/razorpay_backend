@@ -1,3 +1,7 @@
+console.log("KEY ID:", process.env.RAZORPAY_KEY_ID ? "SET" : "MISSING");
+console.log("KEY SECRET:", process.env.RAZORPAY_KEY_SECRET ? "SET" : "MISSING");
+
+
 const express = require("express");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
