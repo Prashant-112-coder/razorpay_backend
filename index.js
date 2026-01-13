@@ -1,13 +1,19 @@
-console.log("KEY ID:", process.env.RAZORPAY_KEY_ID ? "SET" : "MISSING");
-console.log("KEY SECRET:", process.env.RAZORPAY_KEY_SECRET ? "SET" : "MISSING");
+// ==============================
+// 🔐 LOAD ENV
+// ==============================
+require("dotenv").config();
 
-
+// ==============================
+// 📦 IMPORTS
+// ==============================
 const express = require("express");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const cors = require("cors");
-require("dotenv").config();
 
+// ==============================
+// 🚀 APP INIT
+// ==============================
 const app = express();
 
 // ==============================
@@ -15,22 +21,19 @@ const app = express();
 // ==============================
 app.use(express.json());
 app.use(cors({
-  origin: "*",   // Allow all origins (or set your Vercel domain)
+  origin: "*",   // Change to your frontend URL in production
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type"]
 }));
 
 // ==============================
-// 🔎 DEBUG: CHECK ENV VARIABLES
+// 🔎 DEBUG ENV VARIABLES
 // ==============================
-console.log("RAZORPAY_KEY_ID:", process.env.RAZORPAY_KEY_ID);
-console.log(
-  "RAZORPAY_KEY_SECRET:",
-  process.env.RAZORPAY_KEY_SECRET ? "Loaded" : "Missing"
-);
+console.log("KEY ID:", process.env.RAZORPAY_KEY_ID ? "SET" : "MISSING");
+console.log("KEY SECRET:", process.env.RAZORPAY_KEY_SECRET ? "SET" : "MISSING");
 
 // ==============================
-// ✅ RAZORPAY INSTANCE
+// 💳 RAZORPAY INSTANCE
 // ==============================
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -44,12 +47,16 @@ app.get("/", (req, res) => {
   res.send("✅ Razorpay Backend is Running");
 });
 
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "OK" });
+});
+
 // ===================================
-// ✅ CREATE ORDER API
+// 🧾 CREATE ORDER
 // ===================================
 app.post("/create-order", async (req, res) => {
   try {
-    console.log("➡️ Create Order Request Body:", req.body);
+    console.log("➡️ Create Order Request:", req.body);
 
     const { amount, currency } = req.body;
 
@@ -61,15 +68,19 @@ app.post("/create-order", async (req, res) => {
     }
 
     const options = {
-      amount: amount, // 💯 from frontend
+      amount: amount,        // in paise (₹99 = 9900)
       currency: currency,
       receipt: "receipt_" + Date.now()
     };
 
     const order = await razorpay.orders.create(options);
 
-    console.log("✅ Order created:", order.id);
-    res.status(200).json(order);
+    console.log("✅ Order Created:", order.id);
+
+    res.status(200).json({
+      success: true,
+      order
+    });
 
   } catch (error) {
     console.error("❌ Create Order Error:", error);
@@ -77,17 +88,17 @@ app.post("/create-order", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to create order",
-      error: error.error || error.message || error
+      error: error.message
     });
   }
 });
 
 // ===================================
-// ✅ VERIFY PAYMENT API
+// 🔐 VERIFY PAYMENT
 // ===================================
 app.post("/verify-payment", (req, res) => {
   try {
-    console.log("➡️ Verify Payment Body:", req.body);
+    console.log("➡️ Verify Payment:", req.body);
 
     const {
       razorpay_order_id,
@@ -110,27 +121,27 @@ app.post("/verify-payment", (req, res) => {
       .digest("hex");
 
     if (expectedSignature === razorpay_signature) {
-      console.log("✅ Payment verified successfully");
+      console.log("✅ Payment Verified");
 
       return res.status(200).json({
         success: true,
         message: "Payment verified successfully"
       });
     } else {
-      console.log("❌ Signature mismatch");
+      console.log("❌ Signature Mismatch");
 
       return res.status(400).json({
         success: false,
-        message: "Signature mismatch. Payment verification failed."
+        message: "Payment verification failed"
       });
     }
 
   } catch (error) {
-    console.error("❌ Verify Payment Error:", error);
+    console.error("❌ Verify Error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Server error during payment verification",
+      message: "Server error during verification",
       error: error.message
     });
   }
