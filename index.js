@@ -21,9 +21,10 @@ const app = express();
 // ==============================
 app.use(express.json());
 app.use(cors({
-  origin: "*",   // Change to your frontend URL in production
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"]
+  origin: ["http://localhost:3000", "http://localhost:5173", "*"],   // Add your frontend URLs
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"],
+  credentials: true
 }));
 
 // ==============================
@@ -49,6 +50,15 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "OK" });
+});
+
+// ===================================
+// 🔑 GET RAZORPAY PUBLIC KEY
+// ===================================
+app.get("/api/razorpay-key", (req, res) => {
+  res.status(200).json({
+    key: process.env.RAZORPAY_KEY_ID
+  });
 });
 
 // ===================================
