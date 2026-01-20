@@ -1,127 +1,75 @@
-// ==============================
-// 🔐 LOAD ENV
-// ==============================
 require("dotenv").config();
-
-// ==============================
-// 📦 IMPORTS
-// ==============================
 const express = require("express");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const cors = require("cors");
 
-// ==============================
-// 🚀 APP INIT
-// ==============================
 const app = express();
 
-// ==============================
 // ✅ MIDDLEWARE
-// ==============================
 app.use(express.json());
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:5173", "*"],   // Add your frontend URLs
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type"],
-  credentials: true
+  origin: "*",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
 }));
 
-// ==============================
-// 🔎 DEBUG ENV VARIABLES
-// ==============================
-console.log("KEY ID:", process.env.RAZORPAY_KEY_ID ? "SET" : "MISSING");
-console.log("KEY SECRET:", process.env.RAZORPAY_KEY_SECRET ? "SET" : "MISSING");
-
-// ==============================
-// 💳 RAZORPAY INSTANCE
-// ==============================
+// ✅ RAZORPAY INSTANCE
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
-// ==============================
 // 🟢 HEALTH CHECK
-// ==============================
 app.get("/", (req, res) => {
-  res.send("✅ Razorpay Backend is Running");
+  res.send("✅ Razorpay Backend Running");
 });
 
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "OK" });
+  res.json({ status: "OK" });
 });
 
-// ===================================
-// 🔑 GET RAZORPAY PUBLIC KEY
-// ===================================
-app.get("/api/razorpay-key", (req, res) => {
-  res.status(200).json({
-    key: process.env.RAZORPAY_KEY_ID
-  });
-});
-
-// ===================================
 // 🧾 CREATE ORDER
-// ===================================
 app.post("/create-order", async (req, res) => {
   try {
-    console.log("➡️ Create Order Request:", req.body);
-
     const { amount, currency } = req.body;
 
     if (!amount || !currency) {
       return res.status(400).json({
         success: false,
-        message: "Amount and currency are required"
+        message: "Amount & currency required"
       });
     }
 
-    const options = {
-      amount: amount,        // in paise (₹99 = 9900)
-      currency: currency,
-      receipt: "receipt_" + Date.now()
-    };
-
-    const order = await razorpay.orders.create(options);
-
-    console.log("✅ Order Created:", order.id);
+    const order = await razorpay.orders.create({
+      amount,
+      currency,
+      receipt: "rcpt_" + Date.now()
+    });
 
     res.status(200).json({
       success: true,
       order
     });
 
-  } catch (error) {
-    console.error("❌ Create Order Error:", error);
-
+  } catch (err) {
+    console.error("Create Order Error:", err);
     res.status(500).json({
       success: false,
-      message: "Failed to create order",
-      error: error.message
+      message: "Order creation failed",
+      error: err.message
     });
   }
 });
 
-// ===================================
 // 🔐 VERIFY PAYMENT
-// ===================================
 app.post("/verify-payment", (req, res) => {
   try {
-    console.log("➡️ Verify Payment:", req.body);
-
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature
     } = req.body;
-
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing payment details"
-      });
-    }
 
     const body = razorpay_order_id + "|" + razorpay_payment_id;
 
@@ -131,36 +79,27 @@ app.post("/verify-payment", (req, res) => {
       .digest("hex");
 
     if (expectedSignature === razorpay_signature) {
-      console.log("✅ Payment Verified");
-
-      return res.status(200).json({
+      return res.json({
         success: true,
-        message: "Payment verified successfully"
+        message: "Payment verified"
       });
     } else {
-      console.log("❌ Signature Mismatch");
-
       return res.status(400).json({
         success: false,
-        message: "Payment verification failed"
+        message: "Invalid signature"
       });
     }
-
-  } catch (error) {
-    console.error("❌ Verify Error:", error);
-
-    return res.status(500).json({
+  } catch (err) {
+    console.error("Verify Error:", err);
+    res.status(500).json({
       success: false,
-      message: "Server error during verification",
-      error: error.message
+      message: "Verification error"
     });
   }
 });
 
-// ===================================
 // 🚀 START SERVER
-// ===================================
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log("🚀 Server running on port", PORT);
 });
