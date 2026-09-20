@@ -22,10 +22,64 @@ const PRODUCTS = {
     id: "modern-resume-pack",
     name: "Modern Resume Pack",
     description: "Clean, editable and ATS-friendly resume resources.",
-    amount: 9900,
+    amount: 4900,
     currency: "INR",
     active: true,
     downloadPath: "product-pack.html"
+  },
+  "ats-classic-85": {
+    id: "ats-classic-85",
+    name: "ATS Classic — 85+ Ready",
+    description: "Original single-column classic resume template with ATS-friendly structure.",
+    amount: 4900,
+    currency: "INR",
+    active: true,
+    downloadPath: "ats-classic-85.html"
+  },
+  "tech-focus-90": {
+    id: "tech-focus-90",
+    name: "Tech Focus — 90+ Ready",
+    description: "Original developer resume template focused on skills, projects and measurable impact.",
+    amount: 4900,
+    currency: "INR",
+    active: true,
+    downloadPath: "tech-focus-90.html"
+  },
+  "executive-minimal-90": {
+    id: "executive-minimal-90",
+    name: "Executive Minimal — 90+ Ready",
+    description: "Original minimalist professional resume with clean ATS-readable hierarchy.",
+    amount: 4900,
+    currency: "INR",
+    active: true,
+    downloadPath: "executive-minimal-90.html"
+  },
+  "fresher-impact-95": {
+    id: "fresher-impact-95",
+    name: "Fresher Impact — 95+ Ready",
+    description: "Original fresher-first template for education, projects, internships and skills.",
+    amount: 4900,
+    currency: "INR",
+    active: true,
+    downloadPath: "fresher-impact-95.html"
+  },
+  "data-analytics-95": {
+    id: "data-analytics-95",
+    name: "Data & Analytics — 95+ Ready",
+    description: "Original data-focused resume with space for analytics projects, tools and results.",
+    amount: 4900,
+    currency: "INR",
+    active: true,
+    downloadPath: "data-analytics-95.html"
+  },
+  "ultra-clean-100": {
+    id: "ultra-clean-100",
+    name: "Ultra Clean — 100 Structure",
+    description: "Original ultra-clean single-column template built around conservative ATS-safe formatting.",
+    amount: 4900,
+    currency: "INR",
+    active: true,
+    downloadPath: "ultra-clean-100.html"
   }
 };
 
