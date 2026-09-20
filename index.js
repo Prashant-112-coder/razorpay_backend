@@ -155,9 +155,28 @@ function getRequestId(req, res, next) {
 
 const allowedOrigins = [
   FRONTEND_URL,
+  "https://payment-gateway-prashants-projects-cfd236dc.vercel.app",
   "http://localhost:5500",
   "http://127.0.0.1:5500"
 ].filter(Boolean);
+
+function isAllowedOrigin(origin) {
+  if (!origin || allowedOrigins.includes(origin)) return true;
+
+  // Vercel creates a unique hostname for each production deployment.
+  // Allow only this storefront's deployment aliases, not arbitrary Vercel apps.
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === "https:" &&
+      url.hostname.endsWith(".vercel.app") &&
+      url.hostname.startsWith("payment-gateway-") &&
+      url.hostname.endsWith("-prashants-projects-cfd236dc.vercel.app")
+    );
+  } catch {
+    return false;
+  }
+}
 
 app.set("trust proxy", 1);
 app.use(setSecurityHeaders);
@@ -235,7 +254,7 @@ app.use(express.json({ limit: "16kb" }));
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     return callback(new Error("Origin not allowed by CORS."));
