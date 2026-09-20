@@ -303,6 +303,36 @@ async function getOrCreateDownload(orderId) {
   return rawToken;
 }
 
+function createStatelessDownloadToken(orderId, paymentId) {
+  const payload = {
+    orderId,
+    paymentId,
+    exp: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", RAZORPAY_KEY_SECRET).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function verifyStatelessDownloadToken(token) {
+  const [encoded, signature] = String(token || "").split(".");
+  if (!encoded || !signature) return null;
+  const expected = crypto.createHmac("sha256", RAZORPAY_KEY_SECRET).update(encoded).digest("base64url");
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(signature, "utf8");
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    if (!payload.orderId || !payload.paymentId || !payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 async function markOrderPaid(razorpayOrderId, razorpayPaymentId, amount, currency) {
   if (!db) return null;
 
@@ -613,6 +643,10 @@ app.post("/verify-payment", async (req, res) => {
       payment.currency
     );
 
+    const statelessDownloadUrl = !db
+      ? `${FRONTEND_URL || ""}/download/${createStatelessDownloadToken(order.id, payment.id)}`
+      : null;
+
     return res.json({
       success: true,
       message: "Payment verified",
@@ -621,9 +655,9 @@ app.post("/verify-payment", async (req, res) => {
       paymentId: payment.id,
       amount: payment.amount,
       currency: payment.currency,
-      downloadUrl: paidOrder.downloadUrl
+      downloadUrl: paidOrder?.downloadUrl
         ? `${FRONTEND_URL || ""}${paidOrder.downloadUrl}`
-        : null
+        : statelessDownloadUrl
     });
   } catch (err) {
     console.error("Verify Error:", {
@@ -642,7 +676,45 @@ app.post("/verify-payment", async (req, res) => {
 });
 
 app.get("/download/:token", async (req, res) => {
-  if (requireDatabase(res)) return;
+  if (!db) {
+    try {
+      const payload = verifyStatelessDownloadToken(req.params.token);
+      if (!payload) {
+        return res.status(404).send("This download link is invalid or has expired.");
+      }
+
+      const [payment, order] = await Promise.all([
+        razorpay.payments.fetch(payload.paymentId),
+        razorpay.orders.fetch(payload.orderId)
+      ]);
+
+      if (
+        payment.status !== "captured" ||
+        payment.order_id !== order.id ||
+        payment.amount !== order.amount ||
+        payment.currency !== order.currency
+      ) {
+        return res.status(403).send("This payment is not eligible for download.");
+      }
+
+      const product = getProduct(order.notes?.productId || "modern-resume-pack");
+      if (!product) {
+        return res.status(404).send("The purchased product is unavailable.");
+      }
+
+      const filePath = path.resolve(__dirname, "products", product.downloadPath);
+      const productRoot = path.resolve(__dirname, "products");
+      if (!filePath.startsWith(productRoot + path.sep) || !fs.existsSync(filePath)) {
+        return res.status(500).send("The purchased product is temporarily unavailable.");
+      }
+
+      res.setHeader("Content-Disposition", 'attachment; filename="ResumeCraft-Modern-Resume-Pack.html"');
+      return res.sendFile(filePath);
+    } catch (err) {
+      console.error("Stateless download error:", { requestId: req.requestId, message: err.message });
+      return res.status(500).send("Unable to prepare your download.");
+    }
+  }
 
   try {
     const tokenHash = crypto.createHash("sha256").update(req.params.token).digest("hex");
