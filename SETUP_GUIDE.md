@@ -1,102 +1,109 @@
-# Razorpay Backend Setup Guide
+# ResumeCraft Payments API — Production Setup
 
-## Backend configuration
+## Current architecture
 
-Set these variables in your local `.env` file or in the Render service environment:
+```
+Vercel storefront
+      |
+      v
+Render Node/Express API
+      |
+      +--> Razorpay Checkout + API
+      |
+      +--> PostgreSQL (production schema)
+      |
+      +--> Private object storage (digital products)
+      |
+      +--> Email / invoice provider
+```
+
+## Environment
+
+Set these variables in Render:
 
 ```env
-RAZORPAY_KEY_ID=your_razorpay_test_key_id
-RAZORPAY_KEY_SECRET=your_razorpay_test_key_secret
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 FRONTEND_URL=https://your-frontend.vercel.app
+ADMIN_TOKEN=long_random_secret
+DATABASE_URL=your_postgresql_connection_string
 PORT=10000
+NODE_ENV=production
 ```
 
-**Never commit real Razorpay credentials to GitHub.** If a real secret has ever been committed to a public repository, rotate it in the Razorpay dashboard and update the deployment with the new value.
+Never commit real credentials.
 
-## Endpoints
+## API
 
-### GET `/`
-Basic backend availability check.
+- GET `/` — service metadata
+- GET `/health` — health/configuration status
+- GET `/api/razorpay-key` — public Razorpay key
+- GET `/api/products` — active product catalog
+- POST `/create-order` — server-priced Razorpay order
+- POST `/verify-payment` — signature + Razorpay payment verification
+- POST `/webhook/razorpay` — signed Razorpay webhook receiver
+- GET `/admin/summary` — protected operational summary
 
-### GET `/health`
-Returns backend health and whether Razorpay configuration is present.
-
-### GET `/api/razorpay-key`
-Returns the public Razorpay key ID for frontend checkout initialization. The secret is never returned.
-
-### POST `/create-order`
-Creates a Razorpay order.
-
-Request:
+### Create order
 
 ```json
 {
-  "productId": "modern-resume-pack"
-}
-```
-
-The backend owns the product price and currency. The frontend only sends the product ID.
-
-### POST `/verify-payment`
-Verifies the Razorpay checkout signature on the backend.
-
-## Render deployment
-
-For the Render web service, configure:
-
-- `RAZORPAY_KEY_ID`
-- `RAZORPAY_KEY_SECRET`
-
-Keep the existing build command:
-
-```
-npm install
-```
-
-and start command:
-
-```
-npm start
-```
-
-After changing environment variables, redeploy the service and verify:
-
-```
-GET /health
-```
-
-The response should report `"status": "OK"` and `"razorpayConfigured": true`.
-
-## Testing
-
-Create an order:
-
-```bash
-curl -X POST https://your-backend.onrender.com/create-order ^
-  -H "Content-Type: application/json" ^
-  -d "{\"productId\":\"modern-resume-pack\"}"
-```
-
-Expected successful response:
-
-```json
-{
-  "success": true,
-  "order": {
-    "id": "order_...",
-    "amount": 9900,
-    "currency": "INR"
+  "productId": "modern-resume-pack",
+  "customer": {
+    "name": "Customer Name",
+    "email": "customer@example.com"
   }
 }
 ```
 
-## Frontend integration
+The client cannot choose the amount or currency.
 
-The frontend should fetch `/api/razorpay-key` instead of hard-coding the key ID. Payment success should only be displayed after `/verify-payment` returns a successful response.
+Send an `X-Idempotency-Key` header for retry-safe order creation. The current fallback cache is in-memory; enable the database layer before relying on it for multi-instance production traffic.
 
-## Security checklist
+## Razorpay webhook
 
-- Never commit `.env` files.
-- Never expose `RAZORPAY_KEY_SECRET` in frontend code.
-- Rotate any credential that has been exposed publicly.
-- Do not treat checkout completion as payment verification.
+Configure the Razorpay dashboard to POST events to:
+
+```
+https://YOUR-BACKEND/webhook/razorpay
+```
+
+Use the same value as `RAZORPAY_WEBHOOK_SECRET`. The endpoint validates the exact raw body with HMAC SHA-256 and rejects duplicate event IDs during the active process.
+
+For durable event history and multi-instance processing, persist webhook events using `schema.sql`.
+
+## Database
+
+`schema.sql` defines products, customers, orders, webhook events, downloads, coupons and audit logs.
+
+Run it against PostgreSQL before enabling durable commerce workflows.
+
+## Security
+
+- Server-owned pricing
+- Signature verification
+- Webhook signature verification
+- Request size limits
+- Basic API rate limiting
+- CORS allow-list
+- Security response headers
+- Request IDs
+- Idempotency foundation
+- Admin token protection
+
+Before accepting real customers, add a persistent database, protected object storage, email delivery, automated tests, monitoring and a production Razorpay account.
+
+## Local testing
+
+```bash
+npm install
+npm start
+```
+
+Then:
+
+```
+GET http://localhost:10000/health
+GET http://localhost:10000/api/products
+```
