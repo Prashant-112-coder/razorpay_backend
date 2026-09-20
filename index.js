@@ -817,12 +817,12 @@ app.post("/admin/login", rateLimit, (req, res) => {
   if (!supplied || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return res.status(401).json({ success: false, message: "Invalid admin credentials." });
   }
-  res.setHeader("Set-Cookie", "admin_session=" + createAdminSession() + "; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=28800");
+  res.setHeader("Set-Cookie", "admin_session=" + createAdminSession() + "; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=28800");
   return res.json({ success: true, expiresIn: 28800 });
 });
 
 app.post("/admin/logout", (req, res) => {
-  res.setHeader("Set-Cookie", "admin_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+  res.setHeader("Set-Cookie", "admin_session=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0");
   return res.json({ success: true });
 });
 
