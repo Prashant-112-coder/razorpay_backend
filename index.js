@@ -15,6 +15,7 @@ const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET;
 const FRONTEND_URL = process.env.FRONTEND_URL;
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const DATABASE_URL = process.env.DATABASE_URL;
+const PUBLIC_API_URL = process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || "https://razorpay-backend-ke6v.onrender.com";
 
 const PRODUCTS = {
   "modern-resume-pack": {
@@ -644,7 +645,7 @@ app.post("/verify-payment", async (req, res) => {
     );
 
     const statelessDownloadUrl = !db
-      ? `${FRONTEND_URL || ""}/download/${createStatelessDownloadToken(order.id, payment.id)}`
+      ? `${PUBLIC_API_URL}/download/${createStatelessDownloadToken(order.id, payment.id)}`
       : null;
 
     return res.json({
@@ -656,7 +657,7 @@ app.post("/verify-payment", async (req, res) => {
       amount: payment.amount,
       currency: payment.currency,
       downloadUrl: paidOrder?.downloadUrl
-        ? `${FRONTEND_URL || ""}${paidOrder.downloadUrl}`
+        ? `${PUBLIC_API_URL}${paidOrder.downloadUrl}`
         : statelessDownloadUrl
     });
   } catch (err) {
