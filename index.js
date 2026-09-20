@@ -448,8 +448,6 @@ app.get("/api/products", async (req, res) => {
 app.post("/create-order", async (req, res) => {
   const configurationError = requireRazorpayConfig(res);
   if (configurationError) return configurationError;
-  if (requireDatabase(res)) return;
-
   const idempotencyKey = req.get("X-Idempotency-Key");
   if (!idempotencyKey || idempotencyKey.length > 200) {
     return res.status(400).json({
@@ -461,28 +459,33 @@ app.post("/create-order", async (req, res) => {
   cleanExpiredEntries(recentOrders, 10 * 60 * 1000);
 
   try {
-    const existing = await db.query(
-      `select o.razorpay_order_id, o.amount, o.currency, o.product_id, p.name, p.description
-       from orders o
-       join products p on p.id = o.product_id
-       where o.idempotency_key = $1`,
-      [idempotencyKey]
-    );
+    if (!db) {
+      const cached = recentOrders.get(idempotencyKey);
+      if (cached) return res.json(cached.response);
+    } else {
+      const existing = await db.query(
+        `select o.razorpay_order_id, o.amount, o.currency, o.product_id, p.name, p.description
+         from orders o
+         join products p on p.id = o.product_id
+         where o.idempotency_key = $1`,
+        [idempotencyKey]
+      );
 
-    if (existing.rowCount > 0) {
-      const row = existing.rows[0];
-      const order = await razorpay.orders.fetch(row.razorpay_order_id);
-      return res.json({
-        success: true,
-        product: {
-          id: row.product_id,
-          name: row.name,
-          description: row.description,
-          amount: row.amount,
-          currency: row.currency
-        },
-        order
-      });
+      if (existing.rowCount > 0) {
+        const row = existing.rows[0];
+        const order = await razorpay.orders.fetch(row.razorpay_order_id);
+        return res.json({
+          success: true,
+          product: {
+            id: row.product_id,
+            name: row.name,
+            description: row.description,
+            amount: row.amount,
+            currency: row.currency
+          },
+          order
+        });
+      }
     }
 
     const { productId, customer } = req.body;
@@ -521,7 +524,7 @@ app.post("/create-order", async (req, res) => {
     const orderId = makeId("ord");
     const orderNumber = `RC-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 
-    await db.query(
+    if (db) await db.query(
       `insert into customers (id, name, email)
        values ($1, $2, $3)
        on conflict (email) do update set name = excluded.name
@@ -529,12 +532,11 @@ app.post("/create-order", async (req, res) => {
       [customerId, safeCustomer.name, safeCustomer.email]
     );
 
-    const customerRow = await db.query(
-      "select id from customers where email = $1",
-      [safeCustomer.email]
-    );
+    const customerRow = db
+      ? await db.query("select id from customers where email = $1", [safeCustomer.email])
+      : { rows: [{ id: customerId }] };
 
-    await db.query(
+    if (db) await db.query(
       `insert into orders
        (id, order_number, customer_id, product_id, status, amount, currency, razorpay_order_id, idempotency_key)
        values ($1, $2, $3, $4, 'CREATED', $5, $6, $7, $8)`,
@@ -585,8 +587,6 @@ app.post("/verify-payment", async (req, res) => {
       message: "Payment verification is not configured on the backend."
     });
   }
-  if (requireDatabase(res)) return;
-
   try {
     const {
       razorpay_order_id,
