@@ -335,7 +335,14 @@ function verifyStatelessDownloadToken(token) {
 }
 
 async function markOrderPaid(razorpayOrderId, razorpayPaymentId, amount, currency) {
-  if (!db) return null;
+  if (!db) {
+    return {
+      id: razorpayOrderId,
+      order_number: `RP-${razorpayOrderId}`,
+      product_id: null,
+      downloadUrl: null
+    };
+  }
 
   const result = await db.query(
     `update orders
