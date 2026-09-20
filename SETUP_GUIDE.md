@@ -7,6 +7,7 @@ Set these variables in your local `.env` file or in the Render service environme
 ```env
 RAZORPAY_KEY_ID=your_razorpay_test_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_test_key_secret
+FRONTEND_URL=https://your-frontend.vercel.app
 PORT=10000
 ```
 
@@ -30,12 +31,11 @@ Request:
 
 ```json
 {
-  "amount": 9900,
-  "currency": "INR"
+  "productId": "modern-resume-pack"
 }
 ```
 
-The amount is expressed in paise.
+The backend owns the product price and currency. The frontend only sends the product ID.
 
 ### POST `/verify-payment`
 Verifies the Razorpay checkout signature on the backend.
@@ -74,7 +74,7 @@ Create an order:
 ```bash
 curl -X POST https://your-backend.onrender.com/create-order ^
   -H "Content-Type: application/json" ^
-  -d "{\"amount\":9900,\"currency\":\"INR\"}"
+  -d "{\"productId\":\"modern-resume-pack\"}"
 ```
 
 Expected successful response:
