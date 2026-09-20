@@ -48,7 +48,8 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
-\nconst razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
+
+const razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
   ? new Razorpay({
       key_id: RAZORPAY_KEY_ID,
       key_secret: RAZORPAY_KEY_SECRET
