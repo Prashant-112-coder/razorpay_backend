@@ -8,10 +8,31 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+const FRONTEND_URL = process.env.FRONTEND_URL;
+
+const PRODUCTS = {
+  "modern-resume-pack": {
+    name: "Modern Resume Pack",
+    amount: 9900,
+    currency: "INR"
+  }
+};
 
 app.use(express.json());
+
+const allowedOrigins = [
+  FRONTEND_URL,
+  "http://localhost:5500",
+  "http://127.0.0.1:5500"
+].filter(Boolean);
+
 app.use(cors({
-  origin: "*",
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("Origin not allowed by CORS."));
+  },
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type"]
 }));
@@ -63,30 +84,28 @@ app.post("/create-order", async (req, res) => {
   if (configurationError) return configurationError;
 
   try {
-    const { amount, currency = "INR" } = req.body;
+    const { productId } = req.body;
+    const product = PRODUCTS[productId];
 
-    if (!Number.isInteger(amount) || amount <= 0) {
+    if (!product) {
       return res.status(400).json({
         success: false,
-        message: "Amount must be a positive integer in paise."
-      });
-    }
-
-    if (currency !== "INR") {
-      return res.status(400).json({
-        success: false,
-        message: "Only INR payments are supported."
+        message: "Invalid product."
       });
     }
 
     const order = await razorpay.orders.create({
-      amount,
-      currency,
-      receipt: "rcpt_" + Date.now()
+      amount: product.amount,
+      currency: product.currency,
+      receipt: `rcpt_${crypto.randomBytes(8).toString("hex")}`,
+      notes: {
+        productId
+      }
     });
 
     return res.status(200).json({
       success: true,
+      product,
       order
     });
   } catch (err) {
@@ -103,8 +122,8 @@ app.post("/create-order", async (req, res) => {
   }
 });
 
-app.post("/verify-payment", (req, res) => {
-  if (!RAZORPAY_KEY_SECRET) {
+app.post("/verify-payment", async (req, res) => {
+  if (!RAZORPAY_KEY_SECRET || !razorpay) {
     return res.status(503).json({
       success: false,
       message: "Payment verification is not configured on the backend."
@@ -131,22 +150,51 @@ app.post("/verify-payment", (req, res) => {
       .update(body)
       .digest("hex");
 
-    if (crypto.timingSafeEqual(
-      Buffer.from(expectedSignature),
-      Buffer.from(razorpay_signature)
-    )) {
-      return res.json({
-        success: true,
-        message: "Payment verified"
+    const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+    const receivedBuffer = Buffer.from(razorpay_signature, "utf8");
+
+    if (
+      expectedBuffer.length !== receivedBuffer.length ||
+      !crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment signature."
       });
     }
 
-    return res.status(400).json({
-      success: false,
-      message: "Invalid payment signature."
+    const [payment, order] = await Promise.all([
+      razorpay.payments.fetch(razorpay_payment_id),
+      razorpay.orders.fetch(razorpay_order_id)
+    ]);
+
+    if (
+      payment.order_id !== razorpay_order_id ||
+      payment.status !== "captured" ||
+      payment.amount !== order.amount ||
+      payment.currency !== order.currency
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment details could not be validated."
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Payment verified",
+      orderId: order.id,
+      paymentId: payment.id,
+      amount: payment.amount,
+      currency: payment.currency
     });
   } catch (err) {
-    console.error("Verify Error:", err);
+    console.error("Verify Error:", {
+      statusCode: err.statusCode,
+      code: err.error?.code,
+      description: err.error?.description || err.message
+    });
+
     return res.status(500).json({
       success: false,
       message: "Payment verification failed."
