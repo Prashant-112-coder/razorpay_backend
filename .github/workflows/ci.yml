@@ -9,12 +9,11 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-      - run: npm install
+      - run: npm install --no-audit --no-fund
       - run: node --check index.js
-      - run: npm audit --audit-level=high || true
