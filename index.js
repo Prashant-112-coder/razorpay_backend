@@ -187,7 +187,8 @@ app.use(cors({
     return callback(new Error("Origin not allowed by CORS."));
   },
   methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type", "X-Request-ID", "X-Idempotency-Key", "Authorization"]
+  allowedHeaders: ["Content-Type", "X-Request-ID", "X-Idempotency-Key", "Authorization"],
+  credentials: true
 }));
 
 app.use((err, req, res, next) => {
@@ -234,6 +235,31 @@ function requireDatabase(res) {
   return false;
 }
 
+function createAdminSession() {
+  const payload = {
+    exp: Math.floor(Date.now() / 1000) + 8 * 60 * 60,
+    nonce: crypto.randomBytes(12).toString("hex")
+  };
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", ADMIN_TOKEN).update(encoded).digest("base64url");
+  return encoded + "." + signature;
+}
+
+function verifyAdminSession(token) {
+  const [encoded, signature] = String(token || "").split(".");
+  if (!encoded || !signature) return false;
+  const expected = crypto.createHmac("sha256", ADMIN_TOKEN).update(encoded).digest("base64url");
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(signature, "utf8");
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
+    return payload.exp > Math.floor(Date.now() / 1000);
+  } catch {
+    return false;
+  }
+}
+
 function requireAdmin(req, res, next) {
   if (!ADMIN_TOKEN) {
     return res.status(503).json({
@@ -242,15 +268,22 @@ function requireAdmin(req, res, next) {
     });
   }
 
-  const token = req.get("Authorization")?.replace(/^Bearer\s+/i, "");
-  const tokenBuffer = Buffer.from(token || "", "utf8");
-  const adminBuffer = Buffer.from(ADMIN_TOKEN, "utf8");
+  const cookieToken = req.headers.cookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("admin_session="))
+    ?.slice("admin_session=".length);
 
-  if (
-    !token ||
-    tokenBuffer.length !== adminBuffer.length ||
-    !crypto.timingSafeEqual(tokenBuffer, adminBuffer)
-  ) {
+  const bearer = req.get("Authorization")?.replace(/^Bearer\s+/i, "");
+  let authenticated = verifyAdminSession(cookieToken);
+
+  if (!authenticated && bearer) {
+    const a = Buffer.from(bearer, "utf8");
+    const b = Buffer.from(ADMIN_TOKEN, "utf8");
+    authenticated = a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+
+  if (!authenticated) {
     return res.status(401).json({
       success: false,
       message: "Unauthorized."
@@ -773,6 +806,52 @@ app.get("/download/:token", async (req, res) => {
       message: err.message
     });
     return res.status(500).send("Unable to prepare your download.");
+  }
+});
+
+app.post("/admin/login", rateLimit, (req, res) => {
+  if (!ADMIN_TOKEN) return res.status(503).json({ success: false, message: "Admin API is not configured." });
+  const supplied = typeof req.body?.token === "string" ? req.body.token : "";
+  const a = Buffer.from(supplied, "utf8");
+  const b = Buffer.from(ADMIN_TOKEN, "utf8");
+  if (!supplied || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).json({ success: false, message: "Invalid admin credentials." });
+  }
+  res.setHeader("Set-Cookie", "admin_session=" + createAdminSession() + "; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=28800");
+  return res.json({ success: true, expiresIn: 28800 });
+});
+
+app.post("/admin/logout", (req, res) => {
+  res.setHeader("Set-Cookie", "admin_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0");
+  return res.json({ success: true });
+});
+
+app.get("/admin/me", requireAdmin, (req, res) => res.json({ success: true, authenticated: true }));
+
+app.get("/admin/dashboard", requireAdmin, async (req, res) => {
+  if (requireDatabase(res)) return;
+  try {
+    const [summary, daily, recent] = await Promise.all([
+      db.query("select (select count(*) from orders)::int as total_orders, (select count(*) from orders where status = 'PAID')::int as paid_orders, (select count(*) from orders where status = 'PENDING')::int as pending_orders, (select count(*) from orders where status = 'REFUNDED')::int as refunded_orders, (select coalesce(sum(amount),0) from orders where status = 'PAID')::int as gross_revenue, (select count(*) from customers)::int as customers, (select coalesce(sum(download_count),0) from downloads)::int as downloads"),
+      db.query("select to_char(day, 'Mon DD') as label, coalesce(sum(o.amount),0)::int as revenue, count(o.id)::int as orders from generate_series(current_date - interval '29 days', current_date, interval '1 day') day left join orders o on o.status = 'PAID' and o.created_at::date = day::date group by day order by day"),
+      db.query("select o.order_number, c.name, c.email, p.name as product, o.amount, o.currency, o.status, o.razorpay_payment_id, o.created_at, coalesce(d.download_count,0)::int as download_count from orders o left join customers c on c.id = o.customer_id join products p on p.id = o.product_id left join downloads d on d.order_id = o.id order by o.created_at desc limit 12")
+    ]);
+    return res.json({ success: true, summary: summary.rows[0], daily: daily.rows, recent: recent.rows });
+  } catch (err) {
+    console.error("Admin dashboard error:", { requestId: req.requestId, message: err.message });
+    return res.status(500).json({ success: false, message: "Could not load admin dashboard." });
+  }
+});
+
+app.get("/admin/orders", requireAdmin, async (req, res) => {
+  if (requireDatabase(res)) return;
+  try {
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100);
+    const result = await db.query("select o.order_number, c.name, c.email, p.name as product, o.amount, o.currency, o.status, o.razorpay_order_id, o.razorpay_payment_id, o.created_at, o.updated_at, coalesce(d.download_count,0)::int as download_count, d.max_downloads, d.expires_at, d.last_downloaded_at from orders o left join customers c on c.id = o.customer_id join products p on p.id = o.product_id left join downloads d on d.order_id = o.id order by o.created_at desc limit $1", [limit]);
+    return res.json({ success: true, orders: result.rows });
+  } catch (err) {
+    console.error("Admin orders error:", { requestId: req.requestId, message: err.message });
+    return res.status(500).json({ success: false, message: "Could not load orders." });
   }
 });
 
