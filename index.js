@@ -18,7 +18,7 @@ const PRODUCTS = {
   }
 };
 
-app.use(express.json());
+app.use(express.json({ limit: "16kb" }));
 
 const allowedOrigins = [
   FRONTEND_URL,
@@ -37,7 +37,18 @@ app.use(cors({
   allowedHeaders: ["Content-Type"]
 }));
 
-const razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
+
+
+app.use((err, req, res, next) => {
+  if (err?.message === "Origin not allowed by CORS.") {
+    return res.status(403).json({
+      success: false,
+      message: "This origin is not allowed to access the payment service."
+    });
+  }
+  return next(err);
+});
+\nconst razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
   ? new Razorpay({
       key_id: RAZORPAY_KEY_ID,
       key_secret: RAZORPAY_KEY_SECRET
