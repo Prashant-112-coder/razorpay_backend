@@ -82,15 +82,14 @@ create index if not exists idx_webhook_events_type on webhook_events(event_type)
 create index if not exists idx_downloads_order_id on downloads(order_id);
 
 insert into products (id, name, description, amount, currency, active, download_path)
-values (
-  'modern-resume-pack',
-  'Modern Resume Pack',
-  'Clean, editable and ATS-friendly resume resources.',
-  9900,
-  'INR',
-  true,
-  'product-pack.html'
-)
+values
+  ('modern-resume-pack', 'Modern Resume Pack', 'Clean, editable and ATS-friendly resume resources.', 4900, 'INR', true, 'product-pack.html'),
+  ('ats-classic-85', 'ATS Classic — 85+ Ready', 'Original single-column classic resume template with ATS-friendly structure.', 4900, 'INR', true, 'ats-classic-85.html'),
+  ('tech-focus-90', 'Tech Focus — 90+ Ready', 'Original developer resume template focused on skills, projects and measurable impact.', 4900, 'INR', true, 'tech-focus-90.html'),
+  ('executive-minimal-90', 'Executive Minimal — 90+ Ready', 'Original minimalist professional resume with clean ATS-readable hierarchy.', 4900, 'INR', true, 'executive-minimal-90.html'),
+  ('fresher-impact-95', 'Fresher Impact — 95+ Ready', 'Original fresher-first template for education, projects, internships and skills.', 4900, 'INR', true, 'fresher-impact-95.html'),
+  ('data-analytics-95', 'Data & Analytics — 95+ Ready', 'Original data-focused resume with space for analytics projects, tools and results.', 4900, 'INR', true, 'data-analytics-95.html'),
+  ('ultra-clean-100', 'Ultra Clean — 100 Structure', 'Original ultra-clean single-column template built around conservative ATS-safe formatting.', 4900, 'INR', true, 'ultra-clean-100.html')
 on conflict (id) do update set
   name = excluded.name,
   description = excluded.description,
