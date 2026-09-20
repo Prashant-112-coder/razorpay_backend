@@ -203,7 +203,9 @@ function requireAdmin(req, res, next) {
   }
 
   const token = req.get("Authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token || !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(ADMIN_TOKEN))) {
+  const tokenBuffer = Buffer.from(token || "", "utf8");
+  const adminBuffer = Buffer.from(ADMIN_TOKEN, "utf8");
+  if (!token || tokenBuffer.length !== adminBuffer.length || !crypto.timingSafeEqual(tokenBuffer, adminBuffer)) {
     return res.status(401).json({
       success: false,
       message: "Unauthorized."
