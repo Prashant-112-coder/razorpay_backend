@@ -544,6 +544,22 @@ app.get("/api/razorpay-key", (req, res) => {
   });
 });
 
+app.get("/free-download/:productId", (req, res) => {
+  const product = getProduct(req.params.productId);
+  if (!product) {
+    return res.status(404).send("This product is unavailable.");
+  }
+
+  const filePath = path.resolve(__dirname, "products", product.downloadPath);
+  const productRoot = path.resolve(__dirname, "products");
+  if (!filePath.startsWith(productRoot + path.sep) || !fs.existsSync(filePath)) {
+    return res.status(404).send("This product is temporarily unavailable.");
+  }
+
+  res.setHeader("Content-Disposition", `attachment; filename="ResumeCraft-${product.id}.html"`);
+  return res.sendFile(filePath);
+});
+
 app.get("/api/products", async (req, res) => {
   const products = Object.values(PRODUCTS)
     .filter((product) => product.active)
